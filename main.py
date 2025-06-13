@@ -29,6 +29,8 @@ if __name__ == "__main__":
     # Init subcommand
     init_parser = subparsers.add_parser('init', help="Scaffold a new microservice.")
     init_parser.add_argument('servicename', help="The name of the microservice to initialize.")
+    init_parser.add_argument('--docker-compose', dest='docker_compose', action='store_true', help="Add service to docker-compose.yml.")
+    init_parser.set_defaults(docker_compose=False)
 
     # Run subcommand
     run_parser = subparsers.add_parser('run', help="Run a service (Node or Python)")
@@ -69,7 +71,7 @@ if __name__ == "__main__":
         sys.exit(0)
     elif args.command == "init":
         from project_assistant.scaffolder import create_microservice
-        create_microservice(args.servicename)
+        create_microservice(args.servicename, git=args.git, docker_compose=args.docker_compose)
         sys.exit(0)
     elif args.command == "run":
         from run_helper import run

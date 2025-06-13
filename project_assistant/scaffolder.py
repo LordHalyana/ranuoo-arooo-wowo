@@ -1,7 +1,8 @@
-def create_microservice(service_name):
+def create_microservice(service_name, git=False, docker_compose=False):
     import os
     import sys
     from pathlib import Path
+    import subprocess
 
     base_path = Path("workspace") / service_name
     if base_path.exists():
@@ -103,3 +104,38 @@ CMD ["npm", "start"]
     (base_path / "Dockerfile").write_text(dockerfile, encoding="utf-8")
 
     print(f"[SUCCESS] Microservice '{service_name}' scaffolded at {base_path}.")
+
+    # Git initialization if requested
+    if git:
+        try:
+            subprocess.run(["git", "init"], cwd=base_path, check=True)
+            print(f"[INFO] Initialized git repository in {base_path}.")
+        except Exception as e:
+            print(f"[WARN] Could not initialize git repo: {e}")
+
+    # Docker Compose support if requested
+    if docker_compose:
+        compose_path = Path("docker-compose.yml")
+        import yaml
+        service_def = {
+            service_name: {
+                "build": {
+                    "context": f"./workspace/{service_name}",
+                    "dockerfile": "Dockerfile"
+                },
+                "ports": ["3000:3000"],
+                "container_name": service_name
+            }
+        }
+        if compose_path.exists():
+            with open(compose_path, "r", encoding="utf-8") as f:
+                compose = yaml.safe_load(f) or {}
+        else:
+            compose = {"version": "3", "services": {}}
+        compose.setdefault("services", {}).update(service_def)
+        with open(compose_path, "w", encoding="utf-8") as f:
+            yaml.dump(compose, f, sort_keys=False)
+        print(f"[INFO] Added '{service_name}' to docker-compose.yml.")
+
+    # --- Registry update ---
+    # ...existing code...
