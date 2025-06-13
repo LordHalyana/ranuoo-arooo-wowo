@@ -1,4 +1,6 @@
-service_name = "gateway"
+[[service]]
+name = "gateway"
+path = "workspace/gateway"
 port = 3000
 description = "Express.js gateway microservice."
 entrypoint = "app.js"

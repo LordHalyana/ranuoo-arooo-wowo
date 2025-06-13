@@ -3,6 +3,7 @@ def create_microservice(service_name, git=False, docker_compose=False):
     import sys
     from pathlib import Path
     import subprocess
+    import subprocess
 
     base_path = Path("workspace") / service_name
     if base_path.exists():
