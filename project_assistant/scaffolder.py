@@ -103,3 +103,26 @@ CMD ["npm", "start"]
     (base_path / "Dockerfile").write_text(dockerfile, encoding="utf-8")
 
     print(f"[SUCCESS] Microservice '{service_name}' scaffolded at {base_path}.")
+
+    # --- Registry update ---
+    import toml
+    registry_path = Path("workspace") / "index.toml"
+    service_entry = {
+        "name": service_name,
+        "path": f"workspace/{service_name}",
+        "port": 3000,
+        "description": f"Express.js {service_name} microservice.",
+        "entrypoint": "app.js"
+    }
+    if registry_path.exists():
+        data = toml.load(registry_path)
+        if "service" not in data:
+            data["service"] = []
+        # Remove any existing entry for this service
+        data["service"] = [s for s in data["service"] if s.get("name") != service_name]
+        data["service"].append(service_entry)
+    else:
+        data = {"service": [service_entry]}
+    with open(registry_path, "w", encoding="utf-8") as f:
+        toml.dump(data, f)
+    print(f"[INFO] Registered '{service_name}' in {registry_path}.")
