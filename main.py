@@ -29,6 +29,9 @@ if __name__ == "__main__":
     # Init subcommand
     init_parser = subparsers.add_parser('init', help="Scaffold a new microservice.")
     init_parser.add_argument('servicename', help="The name of the microservice to initialize.")
+    init_parser.add_argument('--git', dest='git', action='store_true', help="Initialize a git repository in the new service directory.")
+    init_parser.add_argument('--no-git', dest='git', action='store_false', help="Do not initialize git (default).")
+    init_parser.set_defaults(git=False)
 
     # Run subcommand
     run_parser = subparsers.add_parser('run', help="Run a service (Node or Python)")
@@ -69,7 +72,7 @@ if __name__ == "__main__":
         sys.exit(0)
     elif args.command == "init":
         from project_assistant.scaffolder import create_microservice
-        create_microservice(args.servicename)
+        create_microservice(args.servicename, git=args.git)
         sys.exit(0)
     elif args.command == "run":
         from run_helper import run

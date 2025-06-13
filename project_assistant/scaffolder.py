@@ -1,7 +1,8 @@
-def create_microservice(service_name):
+def create_microservice(service_name, git=False):
     import os
     import sys
     from pathlib import Path
+    import subprocess
 
     base_path = Path("workspace") / service_name
     if base_path.exists():
@@ -103,6 +104,14 @@ CMD ["npm", "start"]
     (base_path / "Dockerfile").write_text(dockerfile, encoding="utf-8")
 
     print(f"[SUCCESS] Microservice '{service_name}' scaffolded at {base_path}.")
+
+    # Git initialization if requested
+    if git:
+        try:
+            subprocess.run(["git", "init"], cwd=base_path, check=True)
+            print(f"[INFO] Initialized git repository in {base_path}.")
+        except Exception as e:
+            print(f"[WARN] Could not initialize git repo: {e}")
 
     # --- Registry update ---
     import toml
