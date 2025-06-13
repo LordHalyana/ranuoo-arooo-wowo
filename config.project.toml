@@ -1,0 +1,36 @@
+[ai]
+model = "codellama-7b-instruct.Q4_0.gguf"
+backend = "remote"
+remote_url = "http://192.168.1.186:6942/completion"
+temperature = 0.8
+
+
+[integrity]
+require_dirs = [
+  "src",
+  "src/routes",
+  "src/controllers",
+  "views",
+  "public",
+  "tests",
+  "docs"
+]
+
+forbid_files = [
+  "*.tmp",
+  "*.bak",
+  "*.log",
+  ".DS_Store"
+]
+
+enforce_flat_src = false
+ignore_dirs = [
+  "node_modules",
+  ".git",
+  ".vscode",
+  ".idea"
+]
+
+[microservice]
+mode = "multi"  # enable multi-service mode
+required_files = ["package.json", ".env"]
