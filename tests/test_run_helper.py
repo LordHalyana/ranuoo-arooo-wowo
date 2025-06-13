@@ -53,3 +53,22 @@ def test_run_no_entrypoint(tmp_path, monkeypatch):
     assert e.value.code == 3
 
 # Note: Integration tests for process spawning and --watch are omitted for safety.
+
+def test_find_entrypoint_minimal(tmp_path):
+    # Create a dummy Node service
+    (tmp_path / "main.js").write_text("console.log('hi')\n")
+    cmd, entry = find_entrypoint(tmp_path)
+    assert cmd == "node"
+    assert entry.endswith("main.js")
+
+    # Create a dummy Python service
+    (tmp_path / "main.py").write_text("print('hi')\n")
+    cmd, entry = find_entrypoint(tmp_path)
+    assert cmd == sys.executable
+    assert entry.endswith("main.py")
+
+    # service.toml with entrypoint
+    (tmp_path / "service.toml").write_text("entrypoint = 'main.py'\n")
+    cmd, entry = find_entrypoint(tmp_path)
+    assert cmd == sys.executable
+    assert entry.endswith("main.py")

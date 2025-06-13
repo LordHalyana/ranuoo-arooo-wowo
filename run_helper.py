@@ -140,11 +140,11 @@ def run(args):
                     proc.wait()
                     return proc.returncode
                 elif not WATCHDOG_AVAILABLE:
-                    print("[ERROR] --watch requires watchdog (pip install watchdog)")
+                    print("[ERROR] --watch requires: pip install watchdog OR npm i -g nodemon")
                     sys.exit(4)
             # Python or fallback: use watchdog
             if not WATCHDOG_AVAILABLE:
-                print("[ERROR] --watch requires watchdog (pip install watchdog)")
+                print("[ERROR] --watch requires: pip install watchdog OR npm i -g nodemon")
                 sys.exit(4)
             restart_flag = {"restart": False}
             def restart():
@@ -174,7 +174,15 @@ def run(args):
         return proc.returncode if proc else 1
     except KeyboardInterrupt:
         if proc:
-            proc.terminate()
+            try:
+                if os.name == "nt":
+                    # Windows: terminate the process
+                    proc.terminate()
+                else:
+                    # Unix: send SIGINT to the process group
+                    os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+            except Exception:
+                proc.terminate()
             proc.wait()
         print(f"[{prefix}] Shutting down.")
         return 0
