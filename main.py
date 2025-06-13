@@ -1,9 +1,16 @@
-from project_assistant.suggester import suggest_code_improvement
+"""
+main.py – LocalAI CLI entrypoint
+
+Provides commands for scaffolding, running, linting, and managing microservices.
+"""
+
 import argparse
 import sys
 import os
+from project_assistant.suggester import suggest_code_improvement
 
 def default_test():
+    """Run a default LLM test query."""
     from ai_engine.interface import query_llama
     print(query_llama("Write a Python function that returns True if a number is prime."))
 
@@ -48,6 +55,15 @@ if __name__ == "__main__":
     # VS Code tasks subcommand
     tasks_parser = subparsers.add_parser('vscode-tasks', help="Generate VS Code tasks.json for a microservice.")
     tasks_parser.add_argument('service', help="Service name or path to generate tasks for.")
+
+    # Compose subcommand group
+    compose_parser = subparsers.add_parser('compose', help="Docker Compose utilities for microservices stack.")
+    compose_subparsers = compose_parser.add_subparsers(dest='compose_command', required=True)
+
+    compose_generate = compose_subparsers.add_parser('generate', help="Generate or update docker-compose.yml for all services.")
+    compose_generate.add_argument('--force', action='store_true', help="Overwrite docker-compose.yml instead of merging.")
+
+    compose_up = compose_subparsers.add_parser('up', help="Run 'docker compose up' for the stack.")
 
     args = parser.parse_args()
 
@@ -203,6 +219,12 @@ if __name__ == "__main__":
             json.dump(tasks, f, indent=2)
         print(f"[INFO] VS Code tasks.json generated at {vscode_dir / 'tasks.json'}.")
         sys.exit(0)
+    elif args.command == "compose":
+        from project_assistant import compose_helper
+        if args.compose_command == "generate":
+            sys.exit(compose_helper.generate_compose(force=getattr(args, 'force', False)))
+        elif args.compose_command == "up":
+            sys.exit(compose_helper.run_compose_up())
     else:
         print(f"[WARN] Unknown command '{args.command}'. Running default test.\n")
         default_test()

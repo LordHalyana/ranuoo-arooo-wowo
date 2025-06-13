@@ -1,0 +1,30 @@
+version: '3'
+services:
+  gateway:
+    build:
+      context: ./workspace/gateway
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    container_name: gateway
+  overlord:
+    build:
+      context: ./workspace/overlord
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    container_name: overlord
+  register:
+    build:
+      context: ./workspace/register
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    container_name: register
+  auth:
+    build:
+      context: ./workspace/auth
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    container_name: auth

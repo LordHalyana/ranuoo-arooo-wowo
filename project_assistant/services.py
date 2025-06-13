@@ -7,6 +7,7 @@ import time
 import os
 import signal
 from pathlib import Path
+import shutil
 from typing import Optional
 from project_assistant.utils import find_service_root, load_model_from_config
 
@@ -42,13 +43,24 @@ class RestartOnChangeHandler(FileSystemEventHandler):
 def run_service(args):
     service = args.service
     watch = getattr(args, "watch", False)
-    model = getattr(args, "model", None) or load_model_from_config()
-    if model:
-        print(f"[INFO] Using model: {model}")
+    # Multi-model support: CLI > service.toml > global config
+    model = getattr(args, "model", None)
     service_root = find_service_root(service)
     if not service_root:
         print(f"[ERROR] Could not find service root for '{service}'.")
         sys.exit(2)
+    # Try to load model from service.toml if not provided by CLI
+    if model is None:
+        import toml
+        toml_path = service_root / "service.toml"
+        if toml_path.exists():
+            config = toml.load(toml_path)
+            model = config.get("model")
+    # Fallback to global config.project.toml
+    if model is None:
+        model = load_model_from_config()
+    if model:
+        print(f"[INFO] Using model: {model}")
     entry = find_entrypoint(service_root)
     if not entry:
         print(f"[ERROR] No entrypoint found for service '{service}'.")
@@ -64,7 +76,7 @@ def run_service(args):
     try:
         if watch:
             if cmd == "node":
-                import shutil
+                # Use nodemon if available
                 if shutil.which("nodemon"):
                     proc = subprocess.Popen(["nodemon", entrypoint])
                     proc.wait()
@@ -72,6 +84,9 @@ def run_service(args):
                 elif not WATCHDOG_AVAILABLE:
                     print("[ERROR] --watch requires: pip install watchdog OR npm i -g nodemon")
                     sys.exit(4)
+                else:
+                    print("[WARN] nodemon not found, falling back to watchdog.")
+            # Python or fallback: use watchdog
             if not WATCHDOG_AVAILABLE:
                 print("[ERROR] --watch requires: pip install watchdog OR npm i -g nodemon")
                 sys.exit(4)
@@ -85,7 +100,11 @@ def run_service(args):
             observer.schedule(event_handler, str(service_root), recursive=True)
             observer.start()
             while True:
-                proc = start()
+                # Use process group for graceful SIGINT
+                if os.name == "nt":
+                    proc = subprocess.Popen([cmd, entrypoint], creationflags=subprocess.CREATE_NEW_PROCESS_GROUP, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                else:
+                    proc = subprocess.Popen([cmd, entrypoint], preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 threads = stream_output(proc, prefix)
                 while proc.poll() is None and not restart_flag["restart"]:
                     time.sleep(0.2)
@@ -97,7 +116,11 @@ def run_service(args):
                 else:
                     break
         else:
-            proc = start()
+            # Use process group for graceful SIGINT
+            if os.name == "nt":
+                proc = subprocess.Popen([cmd, entrypoint], creationflags=subprocess.CREATE_NEW_PROCESS_GROUP, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            else:
+                proc = subprocess.Popen([cmd, entrypoint], preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             threads = stream_output(proc, prefix)
             proc.wait()
         return proc.returncode if proc else 1
@@ -105,7 +128,7 @@ def run_service(args):
         if proc:
             try:
                 if os.name == "nt":
-                    proc.terminate()
+                    proc.send_signal(signal.CTRL_BREAK_EVENT)
                 else:
                     os.killpg(os.getpgid(proc.pid), signal.SIGINT)
             except Exception:
