@@ -1,8 +1,7 @@
-def create_microservice(service_name, git=False, docker_compose=False):
+def create_microservice(service_name, git=False, docker_compose=False, port="3000"):
     import os
     import sys
     from pathlib import Path
-    import subprocess
     import subprocess
 
     base_path = Path("workspace") / service_name
@@ -39,7 +38,7 @@ app.get('/', (req, res) => {{
     res.render('index', {{ service: '{service_name}' }});
 }});
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || {port};
 app.listen(PORT, () => {{
     console.log(`{service_name} running on port ${{PORT}}`);
 }});
@@ -99,7 +98,7 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --production
 COPY . .
-EXPOSE 3000
+EXPOSE {port}
 CMD ["npm", "start"]
 '''
     (base_path / "Dockerfile").write_text(dockerfile, encoding="utf-8")
@@ -124,7 +123,7 @@ CMD ["npm", "start"]
                     "context": f"./workspace/{service_name}",
                     "dockerfile": "Dockerfile"
                 },
-                "ports": ["3000:3000"],
+                "ports": [f"{port}:{port}"],
                 "container_name": service_name
             }
         }
@@ -139,4 +138,21 @@ CMD ["npm", "start"]
         print(f"[INFO] Added '{service_name}' to docker-compose.yml.")
 
     # --- Registry update ---
-    # ...existing code...
+    import toml
+    registry_path = Path("workspace") / "index.toml"
+    service_entry = {
+        "name": service_name,
+        "path": f"workspace/{service_name}",
+        "port": int(port),
+        "description": f"Express.js {service_name} microservice.",
+        "entrypoint": "app.js"
+    }
+    if registry_path.exists():
+        with open(registry_path, "r", encoding="utf-8") as f:
+            registry = toml.load(f)
+    else:
+        registry = {"services": {}}
+    registry["services"].setdefault(service_name, {}).update(service_entry)
+    with open(registry_path, "w", encoding="utf-8") as f:
+        toml.dump(registry, f)
+    print(f"[INFO] Registered '{service_name}' in workspace/index.toml.")

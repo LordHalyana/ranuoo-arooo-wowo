@@ -1,7 +1,7 @@
 from project_assistant.suggester import suggest_code_improvement
+import argparse
 import sys
 import os
-import argparse
 
 def default_test():
     from ai_engine.interface import query_llama
@@ -28,14 +28,26 @@ if __name__ == "__main__":
 
     # Init subcommand
     init_parser = subparsers.add_parser('init', help="Scaffold a new microservice.")
-    init_parser.add_argument('servicename', help="The name of the microservice to initialize.")
+    init_parser.add_argument('servicename', nargs='?', help="The name of the microservice to initialize.")
     init_parser.add_argument('--docker-compose', dest='docker_compose', action='store_true', help="Add service to docker-compose.yml.")
-    init_parser.set_defaults(docker_compose=False)
+    init_parser.add_argument('--git', dest='git', action='store_true', help="Initialize a git repository in the new service directory.")
+    init_parser.add_argument('--no-git', dest='git', action='store_false', help="Do not initialize git (default).")
+    init_parser.add_argument('--interactive', action='store_true', help="Use interactive wizard to configure the microservice.")
+    init_parser.set_defaults(docker_compose=False, git=False)
 
     # Run subcommand
     run_parser = subparsers.add_parser('run', help="Run a service (Node or Python)")
     run_parser.add_argument('service', help="Service name or path to run.")
     run_parser.add_argument('--watch', action='store_true', help="Restart on file changes.")
+    run_parser.add_argument('--model', type=str, default=None, help="Model backend to use (overrides config.project.toml fallback).")
+
+    # Lint subcommand
+    lint_parser = subparsers.add_parser('lint', help="Lint a microservice (ESLint for JS, Ruff/flake8 for Python)")
+    lint_parser.add_argument('service', help="Service name or path to lint.")
+
+    # VS Code tasks subcommand
+    tasks_parser = subparsers.add_parser('vscode-tasks', help="Generate VS Code tasks.json for a microservice.")
+    tasks_parser.add_argument('service', help="Service name or path to generate tasks for.")
 
     args = parser.parse_args()
 
@@ -70,12 +82,102 @@ if __name__ == "__main__":
             print(output)
         sys.exit(0)
     elif args.command == "init":
+        if getattr(args, 'interactive', False):
+            import questionary
+            service_name = args.servicename or questionary.text("Service name:").ask()
+            port = questionary.text("Port:", default="3000").ask()
+            git = questionary.confirm("Initialize git repo?", default=True).ask()
+            docker_compose = questionary.confirm("Add to docker-compose.yml?", default=False).ask()
+        else:
+            service_name = args.servicename
+            port = "3000"
+            git = args.git
+            docker_compose = args.docker_compose
         from project_assistant.scaffolder import create_microservice
-        create_microservice(args.servicename, git=args.git, docker_compose=args.docker_compose)
+        create_microservice(service_name, git=git, docker_compose=docker_compose, port=port)
         sys.exit(0)
     elif args.command == "run":
-        from run_helper import run
-        sys.exit(run(args))
+        from project_assistant.services import run_service
+        sys.exit(run_service(args))
+    elif args.command == "lint":
+        import subprocess
+        import shutil
+        from pathlib import Path
+        service = args.service
+        service_root = Path(service)
+        if not service_root.exists():
+            service_root = Path("workspace") / service
+        if not service_root.exists():
+            print(f"[ERROR] Service '{service}' not found.")
+            sys.exit(2)
+        # JS/Node lint
+        if (service_root / "package.json").exists():
+            if (service_root / "node_modules" / ".bin" / "eslint").exists() or shutil.which("eslint"):
+                print("[INFO] Running ESLint...")
+                try:
+                    subprocess.run(["npx", "eslint", "src"], cwd=service_root, check=True)
+                except subprocess.CalledProcessError as e:
+                    print("[ERROR] ESLint failed.")
+                    sys.exit(e.returncode)
+            else:
+                print("[WARN] ESLint not found. Skipping JS lint.")
+        # Python lint
+        py_files = list(service_root.rglob("*.py"))
+        if py_files:
+            if shutil.which("ruff"):
+                print("[INFO] Running Ruff...")
+                try:
+                    subprocess.run(["ruff", "."], cwd=service_root, check=True)
+                except subprocess.CalledProcessError as e:
+                    print("[ERROR] Ruff failed.")
+                    sys.exit(e.returncode)
+            elif shutil.which("flake8"):
+                print("[INFO] Running flake8...")
+                try:
+                    subprocess.run(["flake8", "--max-line-length=120"], cwd=service_root, check=True)
+                except subprocess.CalledProcessError as e:
+                    print("[ERROR] flake8 failed.")
+                    sys.exit(e.returncode)
+            else:
+                print("[WARN] Ruff/flake8 not found. Skipping Python lint.")
+        sys.exit(0)
+    elif args.command == "vscode-tasks":
+        import json
+        from pathlib import Path
+        service = args.service
+        service_root = Path(service)
+        if not service_root.exists():
+            service_root = Path("workspace") / service
+        if not service_root.exists():
+            print(f"[ERROR] Service '{service}' not found.")
+            sys.exit(2)
+        vscode_dir = service_root / ".vscode"
+        vscode_dir.mkdir(exist_ok=True)
+        tasks = {
+            "version": "2.0.0",
+            "tasks": [
+                {
+                    "label": "Start Service",
+                    "type": "shell",
+                    "command": "python" if (service_root / "service.toml").exists() and any(f.suffix == ".py" for f in service_root.glob("src/*")) else "npm",
+                    "args": ["run", "start"] if (service_root / "package.json").exists() else ["src/app.py"],
+                    "group": "build",
+                    "problemMatcher": []
+                },
+                {
+                    "label": "Lint Service",
+                    "type": "shell",
+                    "command": "python" if (service_root / "service.toml").exists() and any(f.suffix == ".py" for f in service_root.glob("src/*")) else "npx",
+                    "args": ["ruff", "."] if any(f.suffix == ".py" for f in service_root.glob("src/*")) else ["eslint", "src"],
+                    "group": "test",
+                    "problemMatcher": []
+                }
+            ]
+        }
+        with open(vscode_dir / "tasks.json", "w", encoding="utf-8") as f:
+            json.dump(tasks, f, indent=2)
+        print(f"[INFO] VS Code tasks.json generated at {vscode_dir / 'tasks.json'}.")
+        sys.exit(0)
     else:
         print(f"[WARN] Unknown command '{args.command}'. Running default test.\n")
         default_test()
