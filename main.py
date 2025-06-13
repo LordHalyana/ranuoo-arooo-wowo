@@ -58,17 +58,38 @@ if __name__ == "__main__":
 
     if args.command == "check":
         from project_assistant.folder_checker import check_folder_integrity
-        issues = check_folder_integrity(fix=getattr(args, 'fix', False), output_json=getattr(args, 'json', False))
+        from pathlib import Path
+        import toml
+        issues = check_folder_integrity(fix=getattr(args, 'fix', False), output_json=getattr(args, 'json', False)) or []
+        # Validate service.toml and index.toml
+        registry_path = Path("workspace") / "index.toml"
+        if registry_path.exists():
+            registry = toml.load(registry_path)
+            services = registry.get("service", [])
+            for svc in services:
+                svc_path = Path(svc["path"])
+                toml_path = svc_path / "service.toml"
+                if not toml_path.exists():
+                    issues.append(f"[ERROR] {svc['name']}: Missing service.toml at {toml_path}")
+                else:
+                    meta = toml.load(toml_path)
+                    for field in ["service_name", "port", "language", "entrypoint"]:
+                        if field not in meta:
+                            issues.append(f"[ERROR] {svc['name']}: service.toml missing '{field}'")
+                    # Check registry and toml consistency
+                    for field in ["service_name", "port", "language", "entrypoint"]:
+                        if field in meta and field in svc and str(meta[field]) != str(svc[field]):
+                            issues.append(f"[ERROR] {svc['name']}: Mismatch in '{field}' between service.toml and index.toml")
         if issues:
             if not getattr(args, 'json', False):
-                print("\n=== Folder Integrity Issues ===\n")
+                print("\n=== Metadata Validation Issues ===\n")
                 for issue in issues:
                     print(issue)
                 print(f"\nSummary: {len(issues)} issue(s) found.")
             sys.exit(1)
         else:
             if not getattr(args, 'json', False):
-                print("✅ Folder structure looks good.")
+                print("✅ Metadata and folder structure look good.")
                 print("Summary: No issues found.")
             sys.exit(0)
     elif args.command == "suggest":
@@ -86,15 +107,19 @@ if __name__ == "__main__":
             import questionary
             service_name = args.servicename or questionary.text("Service name:").ask()
             port = questionary.text("Port:", default="3000").ask()
+            language = questionary.select("Language:", choices=["node", "python"], default="node").ask()
+            model = questionary.text("Model (optional):", default="").ask() or None
             git = questionary.confirm("Initialize git repo?", default=True).ask()
             docker_compose = questionary.confirm("Add to docker-compose.yml?", default=False).ask()
         else:
             service_name = args.servicename
             port = "3000"
+            language = "node"
+            model = None
             git = args.git
             docker_compose = args.docker_compose
         from project_assistant.scaffolder import create_microservice
-        create_microservice(service_name, git=git, docker_compose=docker_compose, port=port)
+        create_microservice(service_name, git=git, docker_compose=docker_compose, port=port, language=language, model=model)
         sys.exit(0)
     elif args.command == "run":
         from project_assistant.services import run_service

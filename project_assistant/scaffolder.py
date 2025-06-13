@@ -1,8 +1,9 @@
-def create_microservice(service_name, git=False, docker_compose=False, port="3000"):
+def create_microservice(service_name, git=False, docker_compose=False, port="3000", language="node", model=None):
     import os
     import sys
     from pathlib import Path
     import subprocess
+    import toml
 
     base_path = Path("workspace") / service_name
     if base_path.exists():
@@ -103,6 +104,17 @@ CMD ["npm", "start"]
 '''
     (base_path / "Dockerfile").write_text(dockerfile, encoding="utf-8")
 
+    # Write service.toml with metadata
+    service_toml = {
+        "service_name": service_name,
+        "port": int(port),
+        "language": language,
+        "entrypoint": "app.js" if language == "node" else "app.py"
+    }
+    if model:
+        service_toml["model"] = model
+    (base_path / "service.toml").write_text(toml.dumps(service_toml), encoding="utf-8")
+
     print(f"[SUCCESS] Microservice '{service_name}' scaffolded at {base_path}.")
 
     # Git initialization if requested
@@ -137,22 +149,25 @@ CMD ["npm", "start"]
             yaml.dump(compose, f, sort_keys=False)
         print(f"[INFO] Added '{service_name}' to docker-compose.yml.")
 
-    # --- Registry update ---
-    import toml
+    # Registry update
     registry_path = Path("workspace") / "index.toml"
     service_entry = {
         "name": service_name,
         "path": f"workspace/{service_name}",
         "port": int(port),
-        "description": f"Express.js {service_name} microservice.",
-        "entrypoint": "app.js"
+        "language": language,
+        "entrypoint": service_toml["entrypoint"]
     }
+    if model:
+        service_entry["model"] = model
     if registry_path.exists():
-        with open(registry_path, "r", encoding="utf-8") as f:
-            registry = toml.load(f)
+        data = toml.load(registry_path)
+        if "service" not in data:
+            data["service"] = []
+        data["service"] = [s for s in data["service"] if s.get("name") != service_name]
+        data["service"].append(service_entry)
     else:
-        registry = {"services": {}}
-    registry["services"].setdefault(service_name, {}).update(service_entry)
+        data = {"service": [service_entry]}
     with open(registry_path, "w", encoding="utf-8") as f:
-        toml.dump(registry, f)
+        toml.dump(data, f)
     print(f"[INFO] Registered '{service_name}' in workspace/index.toml.")
