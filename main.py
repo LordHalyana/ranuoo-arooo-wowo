@@ -30,6 +30,11 @@ if __name__ == "__main__":
     init_parser = subparsers.add_parser('init', help="Scaffold a new microservice.")
     init_parser.add_argument('servicename', help="The name of the microservice to initialize.")
 
+    # Run subcommand
+    run_parser = subparsers.add_parser('run', help="Run a service (Node or Python)")
+    run_parser.add_argument('service', help="Service name or path to run.")
+    run_parser.add_argument('--watch', action='store_true', help="Restart on file changes.")
+
     args = parser.parse_args()
 
     # Early default test fallback
@@ -66,6 +71,9 @@ if __name__ == "__main__":
         from project_assistant.scaffolder import create_microservice
         create_microservice(args.servicename)
         sys.exit(0)
+    elif args.command == "run":
+        from run_helper import run
+        sys.exit(run(args))
     else:
         print(f"[WARN] Unknown command '{args.command}'. Running default test.\n")
         default_test()
